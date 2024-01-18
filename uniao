@@ -1,0 +1,28 @@
+#!/bin/env python
+import csv
+import sys
+import argparse
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding='utf-8')
+    parser = argparse.ArgumentParser(
+        prog='uniao',
+        description='Une arquivos TSV evitando duplicidades no primeiro campo.')
+    parser.add_argument('arquivo', metavar='A', nargs='+',
+                        help='Arquivos a unir.')
+    args = parser.parse_args()
+    linhas = {}
+    for n in args.arquivo:
+        with open(n, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.reader(f, delimiter='\t')
+            try:
+                header = next(reader)
+            except StopIteration:
+                continue
+            for row in reader:
+                if (row):
+                    linhas[row[0]] = row
+    writer = csv.writer(sys.stdout, delimiter='\t')
+    writer.writerow(header)
+    for row in linhas.values():
+        writer.writerow(row)

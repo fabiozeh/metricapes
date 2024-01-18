@@ -1,0 +1,212 @@
+#!/bin/env python
+import sys
+import httpx
+import asyncio
+from functools import reduce
+import argparse
+import json
+import csv
+from datetime import datetime
+import time
+import xml.etree.ElementTree as ET
+
+params = {}  # parâmetros da busca
+
+
+async def dados_sucupira(tese, client):
+    if (tese['link'] != 'undefined'):
+        r = await client.get(tese['link'])
+        if (r.status_code == 200):
+            root = ET.fromstring(r.content)
+            tese['resumo'] = ET.tostring(root.find("[@id='resumo']/*"), encoding='unicode')
+            tese['palavras_chave'] = ET.tostring(root.find("[@id='palavras']/*"),
+                                                 encoding='unicode')
+            tese['orientacao'] = ET.tostring(root.find("[@id='orientador']/*"), encoding='unicode')
+    else:
+        tese['resumo'] = ''
+        tese['palavras_chave'] = ''
+        tese['orientacao'] = ''
+
+
+async def popula_dados_sucupira(lista_teses):
+    tasks = []
+    async with httpx.AsyncClient(verify=False) as client:
+        for tese in lista_teses:
+            tasks.append(asyncio.create_task(dados_sucupira(tese, client)))
+        await asyncio.gather(*tasks)
+
+
+async def busca_capes(data, paginar=False):
+    url = "https://catalogodeteses.capes.gov.br/catalogo-teses/rest/busca"
+    headers = {'Content-Type': 'application/json'}
+    async with httpx.AsyncClient(headers=headers) as client:
+        r = await client.post(url, json=data)
+        if (r.status_code == 200):
+            if (paginar):
+                return r.json(), 'OK'
+            else:
+                regs_por_pag = 20
+                # data['registrosPorPagina'] = regs_por_pag
+                pag1 = r.json()
+                num_pags = int(pag1['total'] / regs_por_pag)
+                num_pags = num_pags if (pag1['total'] % regs_por_pag == 0) else num_pags + 1
+                parlist = [data.copy() for i in range(num_pags - 1)]
+                for i, d in enumerate(parlist):
+                    d['pagina'] = i + 2
+                pags = []
+                batch_size = 5
+                batches = int(num_pags / batch_size + (1 if num_pags % batch_size != 0 else 0))
+                for i in range(batches):
+                    time.sleep(1)
+                    pags = pags + await asyncio.gather(
+                        *[client.post(url, json=d) for d in
+                          parlist[batch_size * i:batch_size * i + batch_size]])
+                for i, _ in enumerate(pags):
+                    if (pags[i].status_code != 200):
+                        pags[i] = await client.send(pags[i].request)
+                        if (pags[i].status_code != 200):
+                            print(f"Erro na requisição, página {i + 2}", file=sys.stderr)
+                            pags[i] = {'tesesDissertacoes': []}
+                        else:
+                            pags[i] = pags[i].json()
+                    else:
+                        pags[i] = pags[i].json()
+                pag1['tesesDissertacoes'] = reduce(lambda x, y: x + y,
+                                                   map(lambda r: r['tesesDissertacoes'],
+                                                       pags),
+                                                   pag1['tesesDissertacoes'])
+                return pag1, 'OK'
+        else:
+            return {}, r.reason_phrase
+
+
+def formata_agregacoes(json_resp, fd=sys.stdout):
+    for ag in json_resp['agregacoes']:
+        fd.write(f"{ag['campo']} ({ag['total']}):\n")
+        for el in ag['agregados']:
+            fd.write(f"{el['valor']}: {el['total']}\t")
+        fd.write("\n")
+    fd.write(f"Total:  {json_resp['total']}\n")
+
+
+def formata_saida(lista_teses, fd=sys.stdout):
+    if (lista_teses):
+        writer = csv.writer(fd, delimiter='\t')
+
+        writer.writerow(lista_teses[0].keys())
+        for row in lista_teses:
+            writer.writerow(row.values())
+    return
+
+
+def p_out(msg):
+    print(msg)
+
+
+def parse_input_file(f):
+    return json.load(f)
+
+
+def badargs():
+    parser.print_usage()
+    sys.exit(1)
+
+
+async def main():
+    global params
+    if (args.input):
+        with open(args.input) as i:
+            params = parse_input_file(i)
+    if (args.termo):
+        params['termo'] = reduce(lambda x, y: x + " " + y, args.termo, "").strip()
+    if (args.filtro is not None):
+        if ('filtros' not in params.keys()):
+            params['filtros'] = []
+        for f in args.filtro:
+            f = f.strip()
+            f = f.replace('"', "")
+            f = f.split(':')
+            if (len(f) != 2):
+                badargs()
+            params['filtros'].append({'campo': f[0].strip(), 'valor': f[1].strip()})
+    if (args.desde is not None or args.ate is not None):
+        if ('filtros' not in params.keys()):
+            params['filtros'] = []
+        try:
+            y_st = int(args.desde) if (args.desde is not None) else 1987
+            y_end = int(args.ate) if (args.ate is not None) else datetime.now().year
+            while (y_st <= y_end):
+                params['filtros'].append({'campo': 'Ano', 'valor': y_st})
+                y_st += 1
+        except ValueError:
+            badargs()
+    if (args.p):
+        p_out(json.dumps(params))
+        return
+
+    if ('termo' not in params or params['termo'] == ""):
+        badargs()
+
+    if (args.pagina is not None):
+        params['pagina'] = 1
+        response, status = await busca_capes(params, True)
+        if (status != 'OK'):
+            p_out(status)
+            return
+        params['pagina'] = args.pagina
+
+    response, status = await busca_capes(params, args.estatisticas or 'pagina' in params)
+    if (status != 'OK'):
+        p_out(status)
+        return
+    if (args.estatisticas):
+        formata_agregacoes(response)
+        return
+    else:
+        teses = response['tesesDissertacoes']
+        # await popula_dados_sucupira(teses)  # fixme problema no SSL (DH antigo no servidor)
+        formata_saida(teses)
+        return
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding='utf-8')
+    parser = argparse.ArgumentParser(
+        prog='metricapes',
+        description='Consulta a base de trabalhos da CAPES, '
+        'retornando os metadados dos trabalhos encontrados.',
+        formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('termo', metavar='T', nargs='*',
+                        help='Termos a buscar (na sintaxe aceita pela busca de teses da CAPES)')
+    parser.add_argument('-i', '--input', type=str,
+                        help='Lê os critérios de busca a partir do arquivo informado.')
+    parser.add_argument('-p', action='store_true',
+                        help='Imprime os critérios de busca e sai da aplicação.')
+    parser.add_argument('-f', '--filtro', action='append',
+                        help='Inclui um filtro compatível com a busca CAPES na forma '
+                        '<campo>:<valor>.\nUtilizar aspas ao redor da expressão para '
+                        'campos ou valores compostos por mais de uma palavra.\n'
+                        'Campos válidos:\n'
+                        '- Ano\n'
+                        '- Grau Acadêmico: Mestrado ou Doutorado\n'
+                        '- Biblioteca\n'
+                        '- Instituição\n'
+                        '- Nome Programa\n'
+                        '- Área Concentração\n'
+                        '- Área Avaliação\n'
+                        '- Área Conhecimento\n'
+                        '- Grande Àrea Conhecimento\n'  # TODO testar acento correto
+                        '- Banca\n'
+                        '- Orientador\n'
+                        '- Autor\n')
+    parser.add_argument('-d', '--desde',
+                        help='Retorna apenas trabalhos posteriores ao ano informado (inclusive).')
+    parser.add_argument('-a', '--ate',
+                        help='Retorna apenas trabalhos anteriores ao ano informado (inclusive).')
+    parser.add_argument('-e', '--estatisticas', action='store_true',
+                        help='Informa as estatísticas da busca e sai da aplicação.')
+    parser.add_argument('-n', '--pagina', type=int,
+                        help='Coleta apenas os resultados da página indicada.')
+    args = parser.parse_args()
+    asyncio.run(main())
+
