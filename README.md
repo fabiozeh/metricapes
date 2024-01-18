@@ -1,12 +1,13 @@
 # metricapes
-Metricapes é uma ferramenta de linha de comando escrita em Python com o propósito de simplificar a coleta (e posterior análise) dos metadados de trabalhos de pós-graudação segundo obtidos por meio do [Catálogo de teses e dissertações da CAPES]{https://catalogodeteses.capes.gov.br/catalogo-teses}.
+Metricapes é uma ferramenta de linha de comando escrita em Python com o propósito de simplificar a coleta (e posterior análise) dos metadados de trabalhos de pós-graudação segundo obtidos por meio do [Catálogo de teses e dissertações da CAPES](https://catalogodeteses.capes.gov.br/catalogo-teses).
 
 ## Dependências
-Python, versão 3 (recomendável >= 3.10) e a biblioteca [HTTPX]{https://www.python-httpx.org/}, instalável via pip:
+Python, versão 3 (recomendável >= 3.10) e a biblioteca [HTTPX](https://www.python-httpx.org/), instalável via pip:
     pip install httpx
 
 ## Utilização
 Utilize a opção `-h` para obter ajuda sobre a sintaxe de uso da ferramenta:
+
     metricapes -h
 
     usage: metricapes [-h] [-i INPUT] [-p] [-f FILTRO] [-d DESDE] [-a ATE] [-e] [-n PAGINA] [T ...]
@@ -45,17 +46,21 @@ Utilize a opção `-h` para obter ajuda sobre a sintaxe de uso da ferramenta:
                             Coleta apenas os resultados da página indicada.
 
 A fim de ilustrar uma sequência de utilização típica podemos buscar e obter os trabalhos relacionados a "mitocôndrias". Inicialmente, vamos investigar as estatísticas obtidas buscando apenas pelo próprio termo "mitocôndria".
+
     metricapes -e "mitocôndria"
 
 Obs.: ceritifique-se que o terminal de comandos pode localizar o script "metricapes", fornecendo o caminho completo para o diretório one o mesmo se encontra ou incluindo-o na variável de ambiente PATH.
 
 Para restringir os resultados, podemos optar por buscar apenas teses de doutorado escritas desde 2014:
+
     metricapes -e -d 2014 -f "Grau Acadêmico:Doutorado" "mitocôndria"
 
 Podemos explorar a primeira página dos resultados para nos certificarmos de que são relevantes:
+
     metricapes -n 1 -d 2014 -f "Grau Acadêmico:Doutorado" "mitocôndria"
     
 Uma vez satisfeitos, para obter a tabela completa dos resultados, indicamos um arquivo para salvar a saída do programa:
+
     metricapes -d 2014 -f "Grau Acadêmico:Doutorado" "mitocôndria" > resultados.tsv
 
 Recomenda-se salvar os resultados com a extensáo tsv (TAB-separated values). Campos contendo quebras de linha serão delimitados por aspas.
