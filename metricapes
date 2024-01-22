@@ -5,10 +5,14 @@ import asyncio
 from functools import reduce
 import argparse
 import json
+import re
 import csv
 from datetime import datetime
 import time
 import xml.etree.ElementTree as ET
+from html import escape, unescape
+
+httpx._config.DEFAULT_CIPHERS += ":ALL:@SECLEVEL=1"
 
 params = {}  # parâmetros da busca
 
@@ -17,11 +21,11 @@ async def dados_sucupira(tese, client):
     if (tese['link'] != 'undefined'):
         r = await client.get(tese['link'])
         if (r.status_code == 200):
-            root = ET.fromstring(r.content)
-            tese['resumo'] = ET.tostring(root.find("[@id='resumo']/*"), encoding='unicode')
-            tese['palavras_chave'] = ET.tostring(root.find("[@id='palavras']/*"),
-                                                 encoding='unicode')
-            tese['orientacao'] = ET.tostring(root.find("[@id='orientador']/*"), encoding='unicode')
+            content = re.sub("\\&\\w+\\;", lambda x: escape(unescape(x.group(0))), r.text)
+            root = ET.fromstring(content)
+            tese['resumo'] = root.findtext(".//*[@id='resumo']", default='')
+            tese['palavras_chave'] = root.findtext(".//*[@id='palavras']", default='')
+            tese['orientacao'] = root.findtext(".//*[@id='orientador']", default='')
     else:
         tese['resumo'] = ''
         tese['palavras_chave'] = ''
@@ -30,7 +34,7 @@ async def dados_sucupira(tese, client):
 
 async def popula_dados_sucupira(lista_teses):
     tasks = []
-    async with httpx.AsyncClient(verify=False) as client:
+    async with httpx.AsyncClient() as client:
         for tese in lista_teses:
             tasks.append(asyncio.create_task(dados_sucupira(tese, client)))
         await asyncio.gather(*tasks)
@@ -164,7 +168,7 @@ async def main():
         return
     else:
         teses = response['tesesDissertacoes']
-        # await popula_dados_sucupira(teses)  # fixme problema no SSL (DH antigo no servidor)
+        await popula_dados_sucupira(teses)  # fixme problema no SSL (DH antigo no servidor)
         formata_saida(teses)
         return
 
