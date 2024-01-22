@@ -1,5 +1,5 @@
 # metricapes
-Metricapes é uma ferramenta de linha de comando escrita em Python com o propósito de simplificar a coleta (e posterior análise) dos metadados de trabalhos de pós-graduação segundo obtidos por meio do [Catálogo de teses e dissertações da CAPES](https://catalogodeteses.capes.gov.br/catalogo-teses).
+Metricapes é uma ferramenta de linha de comando escrita em Python com o propósito de simplificar a coleta (e posterior análise) dos metadados de trabalhos de pós-graduação segundo obtidos por meio do [Catálogo de teses e dissertações da CAPES](https://catalogodeteses.capes.gov.br/catalogo-teses). Nos casos em que o link é fornecido, também acrescenta metadados adicionais sobre os trabalhos, obtidos pela plataforma [Sucupira](https://sucupira.capes.gov.br/).
 
 ## Dependências
 Python, versão 3 (recomendável >= 3.10) e a biblioteca [HTTPX](https://www.python-httpx.org/), instalável via pip:
@@ -65,5 +65,5 @@ Uma vez satisfeitos, para obter a tabela completa dos resultados, indicamos um a
 
 Recomenda-se salvar os resultados com a extensáo tsv (TAB-separated values). Campos contendo quebras de linha serão delimitados por aspas.
 
-Adicionalmente, explore o diretório "exemplos" para outros casos de uso.
+Adicionalmente, explore o diretório "exemplos" para outros casos de uso (em breve).
 
