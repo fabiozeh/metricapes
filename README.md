@@ -2,15 +2,15 @@
 Metricapes é uma ferramenta de linha de comando escrita em Python com o propósito de simplificar a coleta (e posterior análise) dos metadados de trabalhos de pós-graduação segundo obtidos por meio do [Catálogo de teses e dissertações da CAPES](https://catalogodeteses.capes.gov.br/catalogo-teses). Nos casos em que o link é fornecido, também acrescenta metadados adicionais sobre os trabalhos, obtidos pela plataforma [Sucupira](https://sucupira.capes.gov.br/).
 
 ## Dependências
-Python, versão 3 (recomendável >= 3.10) e a biblioteca [HTTPX](https://www.python-httpx.org/), instalável via pip:
-    pip install httpx
+Python, versão 3 (recomendável >= 3.10) e as biblioteca [HTTPX](https://www.python-httpx.org/) e [tqdm](https://tqdm.github.io/), instaláveis via pip:
+    pip install httpx tqdm
 
 ## Utilização
 Utilize a opção `-h` para obter ajuda sobre a sintaxe de uso da ferramenta:
 
     metricapes -h
 
-    usage: metricapes [-h] [-i INPUT] [-p] [-f FILTRO] [-d DESDE] [-a ATE] [-e] [-n PAGINA] [T ...]
+    usage: metricapes [-h] [-i INPUT] [-p] [-f FILTRO] [-d DESDE] [-a ATE] [-e] [-n PAGINA] [-l LOG] [T ...]
 
     Consulta a base de trabalhos da CAPES, retornando os metadados dos trabalhos encontrados.
 
@@ -44,6 +44,7 @@ Utilize a opção `-h` para obter ajuda sobre a sintaxe de uso da ferramenta:
       -e, --estatisticas    Informa as estatísticas da busca e sai da aplicação.
       -n PAGINA, --pagina PAGINA
                             Coleta apenas os resultados da página indicada.
+      -l LOG, --log LOG     Indica um arquivo para os registros de erros (substitui stderr).
 
 A fim de ilustrar uma sequência de utilização típica podemos buscar e obter os trabalhos relacionados a "mitocôndrias". Inicialmente, vamos investigar as estatísticas obtidas buscando apenas pelo próprio termo "mitocôndria".
 

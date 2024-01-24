@@ -11,39 +11,78 @@ from datetime import datetime
 import time
 import xml.etree.ElementTree as ET
 from html import escape, unescape
+from tqdm import tqdm
 
 httpx._config.DEFAULT_CIPHERS += ":ALL:@SECLEVEL=1"
 
 params = {}  # parâmetros da busca
 
+FD_ERR = sys.stderr  # descritor de arquivo para os registros de erros.
 
-async def dados_sucupira(tese, client):
+
+def formata_header(lista_teses, fd=sys.stdout):
+    if (lista_teses):
+        writer = csv.writer(fd, delimiter='\t')
+        writer.writerow(lista_teses[0].keys())
+    return
+
+
+def formata_saida(lista_teses, fd=sys.stdout):
+    if (lista_teses):
+        writer = csv.writer(fd, delimiter='\t')
+        for row in lista_teses:
+            writer.writerow(row.values())
+    return
+
+
+def p_out(msg):
+    print(msg)
+
+
+async def dados_sucupira(tese, client, errout=FD_ERR):
+    tese['resumo'] = ''
+    tese['palavras_chave'] = ''
+    tese['orientacao'] = ''
     if (tese['link'] != 'undefined'):
-        r = await client.get(tese['link'])
-        if (r.status_code == 200):
-            content = re.sub("\\&\\w+\\;", lambda x: escape(unescape(x.group(0))), r.text)
-            root = ET.fromstring(content)
-            tese['resumo'] = root.findtext(".//*[@id='resumo']", default='')
-            tese['palavras_chave'] = root.findtext(".//*[@id='palavras']", default='')
-            tese['orientacao'] = root.findtext(".//*[@id='orientador']", default='')
-    else:
-        tese['resumo'] = ''
-        tese['palavras_chave'] = ''
-        tese['orientacao'] = ''
+        try:
+            r = await client.get(tese['link'])
+            if (r.status_code == 200):
+                content = re.sub("\\&#?\\w+\\;", lambda x: escape(unescape(x.group(0))), r.text)
+                try:
+                    root = ET.fromstring(content)
+                    tese['resumo'] = root.findtext(".//*[@id='resumo']", default='')
+                    tese['palavras_chave'] = root.findtext(".//*[@id='palavras']", default='')
+                    tese['orientacao'] = root.findtext(".//*[@id='orientador']", default='')
+                except ET.ParseError:
+                    print(f"Erro no processamento da resposta. ID da tese:{tese['id']}",
+                          file=errout)
+            else:
+                print(f"Erro de comunicação. ID da tese:{tese['id']}", file=errout)
+        except Exception as e:
+            print("Erro no carregamento de dados. "
+                  f"ID da tese:{tese['id']}", file=errout)
 
 
-async def popula_dados_sucupira(lista_teses):
-    tasks = []
-    async with httpx.AsyncClient() as client:
-        for tese in lista_teses:
-            tasks.append(asyncio.create_task(dados_sucupira(tese, client)))
-        await asyncio.gather(*tasks)
+async def popula_dados_sucupira(lista_teses, writer=formata_saida,
+                                header_writer=formata_header, errout=FD_ERR):
+    async with httpx.AsyncClient(timeout=15) as client:
+        bufsize = 5
+        batches = int(len(lista_teses) / bufsize) + (1 if (len(lista_teses) % bufsize == 0) else 0)
+        for i in tqdm(range(batches), desc="Consulta ao Sucupira (2/2)"):
+            batch = lista_teses[i * bufsize:(i + 1) * bufsize]
+            tasks = []
+            for tese in batch:
+                tasks.append(asyncio.create_task(dados_sucupira(tese, client, errout)))
+            await asyncio.gather(*tasks)
+            if (i == 0):
+                header_writer(batch)
+            writer(batch)
 
 
 async def busca_capes(data, paginar=False):
     url = "https://catalogodeteses.capes.gov.br/catalogo-teses/rest/busca"
     headers = {'Content-Type': 'application/json'}
-    async with httpx.AsyncClient(headers=headers) as client:
+    async with httpx.AsyncClient(headers=headers, timeout=15) as client:
         r = await client.post(url, json=data)
         if (r.status_code == 200):
             if (paginar):
@@ -60,7 +99,7 @@ async def busca_capes(data, paginar=False):
                 pags = []
                 batch_size = 5
                 batches = int(num_pags / batch_size + (1 if num_pags % batch_size != 0 else 0))
-                for i in range(batches):
+                for i in tqdm(range(batches), desc="Consulta à CAPES (1/2)"):
                     time.sleep(1)
                     pags = pags + await asyncio.gather(
                         *[client.post(url, json=d) for d in
@@ -69,7 +108,7 @@ async def busca_capes(data, paginar=False):
                     if (pags[i].status_code != 200):
                         pags[i] = await client.send(pags[i].request)
                         if (pags[i].status_code != 200):
-                            print(f"Erro na requisição, página {i + 2}", file=sys.stderr)
+                            print(f"Erro na requisição, página {i + 2}", file=FD_ERR)
                             pags[i] = {'tesesDissertacoes': []}
                         else:
                             pags[i] = pags[i].json()
@@ -93,20 +132,6 @@ def formata_agregacoes(json_resp, fd=sys.stdout):
     fd.write(f"Total:  {json_resp['total']}\n")
 
 
-def formata_saida(lista_teses, fd=sys.stdout):
-    if (lista_teses):
-        writer = csv.writer(fd, delimiter='\t')
-
-        writer.writerow(lista_teses[0].keys())
-        for row in lista_teses:
-            writer.writerow(row.values())
-    return
-
-
-def p_out(msg):
-    print(msg)
-
-
 def parse_input_file(f):
     return json.load(f)
 
@@ -121,6 +146,8 @@ async def main():
     if (args.input):
         with open(args.input) as i:
             params = parse_input_file(i)
+    if (args.log):
+        FD_ERR = open(args.log, 'a', encoding='utf-8')  # TODO testar se funciona no parametro default
     if (args.termo):
         params['termo'] = reduce(lambda x, y: x + " " + y, args.termo, "").strip()
     if (args.filtro is not None):
@@ -168,8 +195,7 @@ async def main():
         return
     else:
         teses = response['tesesDissertacoes']
-        await popula_dados_sucupira(teses)  # fixme problema no SSL (DH antigo no servidor)
-        formata_saida(teses)
+        await popula_dados_sucupira(teses, formata_saida, formata_header)
         return
 
 
@@ -211,6 +237,8 @@ if __name__ == "__main__":
                         help='Informa as estatísticas da busca e sai da aplicação.')
     parser.add_argument('-n', '--pagina', type=int,
                         help='Coleta apenas os resultados da página indicada.')
+    parser.add_argument('-l', '--log',
+                        help='Indica um arquivo para os registros de erros (substitui stderr).')
     args = parser.parse_args()
     asyncio.run(main())
 
