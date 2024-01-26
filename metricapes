@@ -55,7 +55,7 @@ async def dados_sucupira(tese, client, errout=sys.stderr):
                     tese['orientacao'] = root.findtext(".//*[@id='orientador']", default='')
                 except ET.ParseError as e:
                     # tentar outro método
-                    match1 = re.search(r"<.*?id=.resumo.*?>(.*)</", content, re.MULTILINE)
+                    match1 = re.search(r"<.*?id=.resumo.*?>((.|\n)*?)</", content, re.MULTILINE)
                     match2 = re.search(r"<.*?id=.palavras.*?>(.*)</", content, re.MULTILINE)
                     match3 = re.search(r"<.*?id=.orientador.*?>(.*)</", content, re.MULTILINE)
                     if match1:
