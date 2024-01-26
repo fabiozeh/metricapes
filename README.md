@@ -1,5 +1,5 @@
 # metricapes
-Metricapes é uma ferramenta de linha de comando escrita em Python com o propósito de simplificar a coleta (e posterior análise) dos metadados de trabalhos de pós-graduação segundo obtidos por meio do [Catálogo de teses e dissertações da CAPES](https://catalogodeteses.capes.gov.br/catalogo-teses). Nos casos em que o link é fornecido, também acrescenta metadados adicionais sobre os trabalhos, obtidos pela plataforma [Sucupira](https://sucupira.capes.gov.br/).
+Metricapes é uma ferramenta de linha de comando escrita em Python com o propósito de simplificar a coleta (e posterior análise) dos metadados de trabalhos de pós-graduação segundo obtidos por meio do [Catálogo de teses e dissertações da CAPES](https://catalogodeteses.capes.gov.br/catalogo-teses). Nos casos em que o link é fornecido, também pode acrescentar metadados extras sobre os trabalhos (opção `-x`), obtidos pela plataforma [Sucupira](https://sucupira.capes.gov.br/).
 
 ## Dependências
 Python, versão 3 (recomendável >= 3.10) e as biblioteca [HTTPX](https://www.python-httpx.org/) e [tqdm](https://tqdm.github.io/), instaláveis via pip:
@@ -45,6 +45,8 @@ Utilize a opção `-h` para obter ajuda sobre a sintaxe de uso da ferramenta:
       -n PAGINA, --pagina PAGINA
                             Coleta apenas os resultados da página indicada.
       -l LOG, --log LOG     Indica um arquivo para os registros de erros (substitui stderr).
+      -x, --dados-extras    Consulta metadados extras utilizando o sistema Sucupira. (Pode demorar se há muitos resultados).
+      -q, --quieto          Suprime informações de acompanhamento do progresso.
 
 A fim de ilustrar uma sequência de utilização típica podemos buscar e obter os trabalhos relacionados a "mitocôndrias". Inicialmente, vamos investigar as estatísticas obtidas buscando apenas pelo próprio termo "mitocôndria".
 

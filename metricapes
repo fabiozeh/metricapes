@@ -39,7 +39,7 @@ def p_out(msg):
     print(msg)
 
 
-async def dados_sucupira(tese, client, errout=FD_ERR):
+async def dados_sucupira(tese, client, errout=sys.stderr):
     tese['resumo'] = ''
     tese['palavras_chave'] = ''
     tese['orientacao'] = ''
@@ -53,22 +53,36 @@ async def dados_sucupira(tese, client, errout=FD_ERR):
                     tese['resumo'] = root.findtext(".//*[@id='resumo']", default='')
                     tese['palavras_chave'] = root.findtext(".//*[@id='palavras']", default='')
                     tese['orientacao'] = root.findtext(".//*[@id='orientador']", default='')
-                except ET.ParseError:
-                    print(f"Erro no processamento da resposta. ID da tese:{tese['id']}",
-                          file=errout)
+                except ET.ParseError as e:
+                    # tentar outro método
+                    match1 = re.search(r"<.*?id=.resumo.*?>(.*)</", content, re.MULTILINE)
+                    match2 = re.search(r"<.*?id=.palavras.*?>(.*)</", content, re.MULTILINE)
+                    match3 = re.search(r"<.*?id=.orientador.*?>(.*)</", content, re.MULTILINE)
+                    if match1:
+                        tese['resumo'] = match1.group(1)
+                    if match2:
+                        tese['palavras_chave'] = match2.group(1)
+                    if match3:
+                        tese['orientacao'] = match3.group(1)
+                    if not (match1 or match2 or match3):
+                        print("Erro no processamento da resposta "
+                              f"(cod. {e.code}; pos. {e.position}). "
+                              f"ID da tese:{tese['id']}",
+                              file=errout)
             else:
                 print(f"Erro de comunicação. ID da tese:{tese['id']}", file=errout)
-        except Exception as e:
+        except Exception:
             print("Erro no carregamento de dados. "
                   f"ID da tese:{tese['id']}", file=errout)
 
 
 async def popula_dados_sucupira(lista_teses, writer=formata_saida,
-                                header_writer=formata_header, errout=FD_ERR):
+                                header_writer=formata_header, errout=sys.stderr, quieto=False):
     async with httpx.AsyncClient(timeout=15) as client:
         bufsize = 5
-        batches = int(len(lista_teses) / bufsize) + (1 if (len(lista_teses) % bufsize == 0) else 0)
-        for i in tqdm(range(batches), desc="Consulta ao Sucupira (2/2)"):
+        batches = int(len(lista_teses) / bufsize) + (0 if (len(lista_teses) % bufsize == 0) else 1)
+        it = range(batches) if (quieto) else tqdm(range(batches), desc="Consulta ao Sucupira")
+        for i in it:
             batch = lista_teses[i * bufsize:(i + 1) * bufsize]
             tasks = []
             for tese in batch:
@@ -79,7 +93,7 @@ async def popula_dados_sucupira(lista_teses, writer=formata_saida,
             writer(batch)
 
 
-async def busca_capes(data, paginar=False):
+async def busca_capes(data, paginar=False, quieto=False):
     url = "https://catalogodeteses.capes.gov.br/catalogo-teses/rest/busca"
     headers = {'Content-Type': 'application/json'}
     async with httpx.AsyncClient(headers=headers, timeout=15) as client:
@@ -99,7 +113,9 @@ async def busca_capes(data, paginar=False):
                 pags = []
                 batch_size = 5
                 batches = int(num_pags / batch_size + (1 if num_pags % batch_size != 0 else 0))
-                for i in tqdm(range(batches), desc="Consulta à CAPES (1/2)"):
+                it = range(batches) if quieto else (
+                    tqdm(range(batches), desc="Consulta à CAPES"))
+                for i in it:
                     time.sleep(1)
                     pags = pags + await asyncio.gather(
                         *[client.post(url, json=d) for d in
@@ -143,11 +159,12 @@ def badargs():
 
 async def main():
     global params
+    global FD_ERR
     if (args.input):
         with open(args.input) as i:
             params = parse_input_file(i)
     if (args.log):
-        FD_ERR = open(args.log, 'a', encoding='utf-8')  # TODO testar se funciona no parametro default
+        FD_ERR = open(args.log, 'a', encoding='utf-8')
     if (args.termo):
         params['termo'] = reduce(lambda x, y: x + " " + y, args.termo, "").strip()
     if (args.filtro is not None):
@@ -180,13 +197,15 @@ async def main():
 
     if (args.pagina is not None):
         params['pagina'] = 1
-        response, status = await busca_capes(params, True)
+        response, status = await busca_capes(params, paginar=True, quieto=args.quieto)
         if (status != 'OK'):
             p_out(status)
             return
         params['pagina'] = args.pagina
 
-    response, status = await busca_capes(params, args.estatisticas or 'pagina' in params)
+    response, status = await busca_capes(params,
+                                         paginar=args.estatisticas or 'pagina' in params,
+                                         quieto=args.quieto)
     if (status != 'OK'):
         p_out(status)
         return
@@ -195,7 +214,10 @@ async def main():
         return
     else:
         teses = response['tesesDissertacoes']
-        await popula_dados_sucupira(teses, formata_saida, formata_header)
+        if (args.dados_extras):
+            await popula_dados_sucupira(teses, errout=FD_ERR, quieto=args.quieto)
+        else:
+            formata_saida(teses)
         return
 
 
@@ -239,6 +261,11 @@ if __name__ == "__main__":
                         help='Coleta apenas os resultados da página indicada.')
     parser.add_argument('-l', '--log',
                         help='Indica um arquivo para os registros de erros (substitui stderr).')
+    parser.add_argument('-x', '--dados-extras', action='store_true',
+                        help='Consulta metadados extras utilizando o sistema Sucupira. '
+                        '(Pode demorar se há muitos resultados).')
+    parser.add_argument('-q', '--quieto', action='store_true',
+                        help='Suprime informações de acompanhamento do progresso.')
     args = parser.parse_args()
     asyncio.run(main())
 
