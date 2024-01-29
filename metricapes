@@ -39,10 +39,12 @@ def p_out(msg):
     print(msg)
 
 
-async def dados_sucupira(tese, client, errout=sys.stderr):
+async def dados_sucupira(tese, client, errout=sys.stderr, retry=3):
     tese['resumo'] = ''
-    tese['palavras_chave'] = ''
+    tese['palavrasChave'] = ''
     tese['orientacao'] = ''
+    tese['areaConcentracao'] = ''
+    tese['linhaPesquisa'] = ''
     if (tese['link'] != 'undefined'):
         try:
             r = await client.get(tese['link'])
@@ -51,29 +53,43 @@ async def dados_sucupira(tese, client, errout=sys.stderr):
                 try:
                     root = ET.fromstring(content)
                     tese['resumo'] = root.findtext(".//*[@id='resumo']", default='')
-                    tese['palavras_chave'] = root.findtext(".//*[@id='palavras']", default='')
+                    tese['palavrasChave'] = root.findtext(".//*[@id='palavras']", default='')
                     tese['orientacao'] = root.findtext(".//*[@id='orientador']", default='')
+                    tese['areaConcentracao'] = root.findtext(".//*[@id='area']", default='')
+                    tese['linhaPesquisa'] = root.findtext(".//*[@id='linha']", default='')
                 except ET.ParseError as e:
                     # tentar outro método
                     match1 = re.search(r"<.*?id=.resumo.*?>((.|\n)*?)</", content, re.MULTILINE)
                     match2 = re.search(r"<.*?id=.palavras.*?>(.*)</", content, re.MULTILINE)
                     match3 = re.search(r"<.*?id=.orientador.*?>(.*)</", content, re.MULTILINE)
+                    match4 = re.search(r"<.*?id=.area.*?>(.*)</", content, re.MULTILINE)
+                    match5 = re.search(r"<.*?id=.linha.*?>(.*)</", content, re.MULTILINE)
                     if match1:
                         tese['resumo'] = match1.group(1)
                     if match2:
-                        tese['palavras_chave'] = match2.group(1)
+                        tese['palavrasChave'] = match2.group(1)
                     if match3:
                         tese['orientacao'] = match3.group(1)
-                    if not (match1 or match2 or match3):
+                    if match4:
+                        tese['areaConcentracao'] = match4.group(1)
+                    if match5:
+                        tese['linhaPesquisa'] = match5.group(1)
+                    if not (match1 or match2 or match3 or match4 or match5):
                         print("Erro no processamento da resposta "
                               f"(cod. {e.code}; pos. {e.position}). "
                               f"ID da tese:{tese['id']}",
                               file=errout)
             else:
-                print(f"Erro de comunicação. ID da tese:{tese['id']}", file=errout)
+                if (retry > 0):
+                    await dados_sucupira(tese, client, errout, retry - 1)
+                else:
+                    print(f"Erro de comunicação. ID da tese:{tese['id']}", file=errout)
         except Exception:
-            print("Erro no carregamento de dados. "
-                  f"ID da tese:{tese['id']}", file=errout)
+            if (retry > 0):
+                await dados_sucupira(tese, client, errout, retry - 1)
+            else:
+                print("Erro no carregamento de dados. "
+                      f"ID da tese:{tese['id']}", file=errout)
 
 
 async def popula_dados_sucupira(lista_teses, writer=formata_saida,
@@ -93,11 +109,17 @@ async def popula_dados_sucupira(lista_teses, writer=formata_saida,
             writer(batch)
 
 
-async def busca_capes(data, paginar=False, quieto=False):
+async def busca_capes(data, paginar=False, quieto=False, retry=3):
     url = "https://catalogodeteses.capes.gov.br/catalogo-teses/rest/busca"
     headers = {'Content-Type': 'application/json'}
     async with httpx.AsyncClient(headers=headers, timeout=15) as client:
-        r = await client.post(url, json=data)
+        try:
+            r = await client.post(url, json=data)
+        except Exception:
+            if (retry > 0):
+                return await busca_capes(data, paginar, quieto, retry - 1)
+            else:
+                return {}, "Erro na comunicação com o servidor CAPES. Tente novamente."
         if (r.status_code == 200):
             if (paginar):
                 return r.json(), 'OK'
@@ -136,6 +158,8 @@ async def busca_capes(data, paginar=False, quieto=False):
                                                    pag1['tesesDissertacoes'])
                 return pag1, 'OK'
         else:
+            if (retry > 0):
+                return await busca_capes(data, paginar, quieto, retry - 1)
             return {}, r.reason_phrase
 
 
@@ -161,7 +185,7 @@ async def main():
     global params
     global FD_ERR
     if (args.input):
-        with open(args.input) as i:
+        with open(args.input, 'r', encoding='utf-8') as i:
             params = parse_input_file(i)
     if (args.log):
         FD_ERR = open(args.log, 'a', encoding='utf-8')
