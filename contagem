@@ -1,0 +1,41 @@
+#!/bin/env python
+# Conta a quantidade de entradas no arquivo TSV informado
+import csv
+import argparse
+
+
+def countEntries(f, v=False):
+    with open(f, 'r', newline='', encoding='utf-8') as tsv:
+        reader = csv.reader(tsv, delimiter='\t')
+        next(reader)
+        linhas = 0
+        com_extras = 0
+        extras_carregados = 0
+        for row in reader:
+            if (row):
+                linhas += 1
+                if (row[11] != 'undefined'):
+                    com_extras += 1
+                    if (row[12]):
+                        extras_carregados += 1
+    return linhas, com_extras, extras_carregados
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        prog='contagem',
+        description=('Utilitário para informar a quantidade de registros'
+                     ' existentes em um arquivo TSV de saída da ferramenta metricapes.'))
+    parser.add_argument('arquivo', metavar='A',
+                        help='Arquivo de entrada a avaliar.')
+    parser.add_argument('-v', action='store_true',
+                        help='Incluir informações adicionais.')
+    args = parser.parse_args()
+    res = countEntries(args.arquivo)
+    if (args.v):
+        print(f"Total de registros: {res[0]}")
+        print(f"Registros com dados extras disponíveis: {res[1]}")
+        print(f"Registros com dados extras carregados: {res[2]}")
+    else:
+        print(res[0])
+

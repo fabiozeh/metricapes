@@ -1,0 +1,14 @@
+{
+        "filtros":[
+            {"campo":"Instituição","valor":"FACULDADE DE ENGENHARIA QUÍMICA DE LORENA"},
+            {"campo":"Instituição","valor":"ESCOLA DE ENGENHARIA DE LORENA"},
+            {"campo":"Instituição","valor":"INSTITUTO DE PESQUISAS ENERGÉTICAS E NUCLEARES"},
+            {"campo":"Instituição","valor":"UNIVERSIDADE DE SÃO PAULO"},
+            {"campo":"Instituição","valor":"UNIVERSIDADE DE SÃO PAULO ( RIBEIRÃO PRETO )"},
+            {"campo":"Instituição","valor":"UNIVERSIDADE DE SÃO PAULO USP EACH"},
+            {"campo":"Instituição","valor":"UNIVERSIDADE DE SÃO PAULO (SÃO CARLOS)"},
+            {"campo":"Instituição","valor":"USP ( FACULDADE DE ODONTOLOGIA DE BAURU )"},
+            {"campo":"Instituição","valor":"USP ( ESCOLA SUPERIOR DE AGRICULTURA LUIZ DE QUEIROZ )"},
+            {"campo":"Instituição","valor":"USP ( CENTRO DE ENERGIA NUCLEAR NA AGRICULTURA )"}
+        ]
+}

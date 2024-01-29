@@ -1,0 +1,37 @@
+#!/bin/env python
+# Completa o arquivo TSV informado com as informações presentes no sistema Sucupira.
+
+import sys
+import csv
+import asyncio
+import httpx
+from tqdm import tqdm
+from importlib.util import spec_from_loader, module_from_spec
+from importlib.machinery import SourceFileLoader
+
+spec = spec_from_loader("metricapes", SourceFileLoader("metricapes", "../../metricapes"))
+metricapes = module_from_spec(spec)
+spec.loader.exec_module(metricapes)
+
+
+async def popula_dados_sucupira(reader, errout=sys.stderr):
+    header = next(reader)
+    writer = csv.writer(sys.stdout, delimiter='\t')
+    writer.writerow(header)
+    async with httpx.AsyncClient(timeout=15) as client:
+        for row in tqdm(reader, desc="Consulta ao Sucupira"):
+            if (row):
+                tese = dict(zip(header, row))
+                if (tese['link'] != 'undefined' and tese['resumo'] == ''):
+                    await metricapes.dados_sucupira(tese, client, errout)
+                metricapes.formata_saida([tese])
+
+
+async def main():
+    await popula_dados_sucupira(reader, errout=open('completa.err', 'w', encoding='utf-8'))
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding='utf-8')
+    with open(sys.argv[1], 'r', newline='', encoding='utf-8') as f:
+        reader = csv.reader(f, delimiter='\t')
+        asyncio.run(main())
