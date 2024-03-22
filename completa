@@ -9,7 +9,7 @@ from tqdm import tqdm
 from importlib.util import spec_from_loader, module_from_spec
 from importlib.machinery import SourceFileLoader
 
-spec = spec_from_loader("metricapes", SourceFileLoader("metricapes", "../../metricapes"))
+spec = spec_from_loader("metricapes", SourceFileLoader("metricapes", "metricapes"))
 metricapes = module_from_spec(spec)
 spec.loader.exec_module(metricapes)
 
